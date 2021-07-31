@@ -1,0 +1,415 @@
+---
+title: "MULTIPLE LINEAR REGRESSION"
+author: "Your Name"
+date: "6/27/2021"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(dlookr)
+library(missRanger)
+library(tidyr)
+library(readr)
+library(Rcpp)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(tidyselect)
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(ggcorrplot)
+```
+
+
+```{r}
+
+Train <- read_csv("Train.csv")
+# colnames(Train)
+# str(Train)
+```
+
+
+
+
+```{r}
+Train<-Train%>%
+  remove_constant()
+```
+
+
+```{r}
+Train%>%
+  get_dupes(id)
+```
+
+
+```{r}
+missing_values<-function(dataframe){
+  na_count1 <-sapply(dataframe, function(y) sum(length(which(is.na(y)))))
+  na_count1 <- data.frame(na_count1)
+  na_count1
+}
+missing_values(dataframe =Train )
+```
+
+
+```{r}
+#high,low,volume,
+Train<-select(Train,open, market_cap, market_cap_global, url_shares,
+              unique_url_shares, reddit_posts, reddit_comments, tweet_spam, tweet_favorites, average_sentiment, news, social_impact_score, volatility, percent_change_24h,close)
+
+
+
+
+```
+
+
+```{r}
+missing_values(dataframe =Train )
+```
+
+
+
+
+
+
+```{r}
+Train$url_shares<-imputate_na(Train, market_cap, url_shares, method= "rpart")
+#Train$volume<-imputate_na(Train, volume, open, method= "rpart")
+#Train$low<-imputate_na(Train, low, high, method= "rpart")
+#Train$high<-imputate_na(Train, high, open, method= "rpart")
+Train$open<-imputate_na(Train, open, close, method = "rpart")
+
+
+
+
+Train$unique_url_shares<-imputate_na(Train, unique_url_shares, url_shares, method= "rpart")
+Train$reddit_posts<-imputate_na(Train, reddit_posts, reddit_comments, method= "rpart")
+Train$reddit_comments<-imputate_na(Train, reddit_comments, reddit_posts, method= "rpart")
+Train$tweet_spam<-imputate_na(Train, tweet_spam, tweet_favorites, method= "rpart")
+Train$tweet_favorites<-imputate_na(Train, tweet_favorites, tweet_spam, method = "rpart")
+
+
+
+Train$average_sentiment<-imputate_na(Train, average_sentiment, news, method= "rpart")
+Train$news<-imputate_na(Train, news, average_sentiment, method= "rpart")
+Train$social_impact_score<-imputate_na(Train, social_impact_score, volatility, method= "rpart")
+Train$volatility<-imputate_na(Train, volatility, social_impact_score, method= "rpart")
+Train$percent_change_24h<-imputate_na(Train, percent_change_24h, market_cap_global, method = "rpart")
+
+
+Train$market_cap_global<-imputate_na(Train, market_cap_global, percent_change_24h, method = "rpart")
+Train$market_cap<-imputate_na(Train, market_cap, market_cap_global, method = "rpart")
+
+
+Train$close<-imputate_na(Train, close, open, method = "rpart")
+
+
+
+
+
+
+```
+
+
+```{r}
+Train<-na.omit(Train)
+```
+
+
+
+```{r}
+missing_values(dataframe = Train) 
+
+```
+
+
+
+
+
+```{r}
+
+plot_boxplots<-function(dataframe){
+  features<-colnames(dataframe)
+for (i in features){
+ boxplot(dataframe[[i]], col =blues9,xlab =paste(i),main = paste("A boxplot of ", i))
+}
+}
+plot_boxplots(dataframe = Train)
+
+```
+
+
+
+
+
+```{r}
+features<-colnames(Train)
+for (i in features){
+  print(ggplot(Train, aes(x=close, y=Train[[i]])) +
+  geom_point() + 
+    ylab(i)+
+  geom_smooth(method=lm))
+}
+```
+
+
+
+## IMPUTING MISSING VALUES
+
+
+```{r}
+# Data_zeros<-Train
+# Data_zeros[is.na(Data_zeros)] = 0
+```
+
+#### IMPUTING MISSING VALUES USING THE MISSRANGER FUNCTION
+
+```{r}
+# 
+# Data_zeros<-missRanger(Train,
+#                        formula = . ~ .,
+#                        seed = 3,
+#                        num.trees=20)
+
+```
+
+
+#### IPUTING OUTLIERS VALUES WITH THE MEDIAN FUNCTION
+
+```{r}
+
+features<-colnames(select(Train))
+for (i in features){
+  Train[[i]]<-imputate_outlier(Train,i,method = "median")
+}
+
+#plot_boxplots(dataframe = Train)
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+# Data_zeros$avg_market<-(Data_zeros$market_cap+Data_zeros$market_cap_global)/2
+# 
+# trainIndex <- createDataPartition(Data_zeros$close, 
+#                                   p = .6, 
+#                                   list = FALSE, 
+#                                   times = 1)
+# 
+# TRAIN <-Data_zeros[trainIndex, ]
+# TEST <- Data_zeros[-trainIndex, ]
+```
+
+
+```{r}
+# LM_model<- lm(close ~volume + tweets + unique_url_shares+reddit_posts+tweet_sentiment_impact2+tweet_sentiment_impact3+tweet_sentiment2 + url_shares + tweet_spam +tweet_followers + tweet_sentiment_impact5, data =Train)
+# summary(LM_model)
+```
+
+
+
+```{r}
+
+y_hat <- predict(LM_model, TEST)
+```
+
+
+```{r}
+test.rf_scored <- as_tibble(cbind(TEST, y_hat))
+
+glimpse(test.rf_scored)
+```
+
+
+```{r}
+RMSE_rf_TEST <- yardstick::rmse(test.rf_scored, truth=close, estimate=y_hat)
+
+RMSE_rf_TEST
+```
+
+
+#### DATA PREDICTION WITH TEST DATA
+
+
+```{r}
+library(readr)
+Test <- read_csv("Test.csv")
+```
+
+```{r}
+Test<-Test%>%
+  remove_constant()
+```
+
+
+```{r}
+Test<-Test%>%
+  remove_empty()
+```
+
+
+```{r}
+# Data_zeros_test<-Test
+# Data_zeros_test[is.na(Data_zeros_test)]=0
+```
+
+
+
+
+```{r}
+#high, low,volume
+Test1<-select(Test, id,open, market_cap, market_cap_global, url_shares,
+              unique_url_shares, reddit_posts, reddit_comments, tweet_spam, tweet_favorites, average_sentiment, news, social_impact_score, volatility, percent_change_24h)
+
+
+#high, low,volume
+Test<-select(Test, open, market_cap, market_cap_global, url_shares,
+              unique_url_shares, reddit_posts, reddit_comments, tweet_spam, tweet_favorites, average_sentiment, news, social_impact_score, volatility, percent_change_24h)
+
+```
+
+
+```{r}
+
+# Test<-missRanger(Test,
+#                        formula = . ~ .,
+#                        seed = 3,
+#                        num.trees=20)
+
+```
+
+
+
+
+```{r}
+Test$url_shares<-imputate_na(Test, market_cap, url_shares, method= "rpart")
+#Test$volume<-imputate_na(Test, volume, open, method= "rpart")
+#Test$low<-imputate_na(Test, low, high, method= "rpart")
+#Test$high<-imputate_na(Test, high, open, method= "rpart")
+Test$open<-imputate_na(Test, open, reddit_comments, method = "rpart")
+
+
+
+
+Test$unique_url_shares<-imputate_na(Test, unique_url_shares, url_shares, method= "rpart")
+Test$reddit_posts<-imputate_na(Test, reddit_posts, reddit_comments, method= "rpart")
+Test$reddit_comments<-imputate_na(Test, reddit_comments, reddit_posts, method= "rpart")
+Test$tweet_spam<-imputate_na(Test, tweet_spam, tweet_favorites, method= "rpart")
+Test$tweet_favorites<-imputate_na(Test, tweet_favorites, tweet_spam, method = "rpart")
+
+
+
+Test$average_sentiment<-imputate_na(Test, average_sentiment, news, method= "rpart")
+Test$news<-imputate_na(Test, news, average_sentiment, method= "rpart")
+Test$social_impact_score<-imputate_na(Test, social_impact_score, volatility, method= "rpart")
+Test$volatility<-imputate_na(Test, volatility, social_impact_score, method= "rpart")
+Test$percent_change_24h<-imputate_na(Test, percent_change_24h, market_cap_global, method = "rpart")
+
+
+Test$market_cap_global<-imputate_na(Test, market_cap_global, percent_change_24h, method = "rpart")
+Test$market_cap<-imputate_na(Test, market_cap, market_cap_global, method = "rpart")
+
+
+
+```
+
+
+
+```{r}
+Test[is.na(Test)] = 0
+```
+
+
+
+#### IPUTING OUTLIERS VALUES WITH THE MEDIAN FUNCTION
+
+```{r}
+features<-colnames(Test)
+for (i in features){
+  Test[[i]]<-as.numeric(Test[[i]])
+}
+
+
+
+features<-colnames(Test)
+for (i in features){
+  Test[[i]]<-imputate_outlier(Test,i,method = "median")
+}
+
+
+```
+
+
+
+```{r}
+missing_values(dataframe = Test)
+```
+
+
+
+```{r}
+library(caret)
+# Define training control
+set.seed(12) 
+train.control <- trainControl(method="repeatedcv", number=10, repeats=5)
+# Train the model
+Train$close<-as.numeric(Train$close)
+model <- train(close~ ., data =Train,
+               method = "lm",
+               trControl = train.control)
+summary(model)
+```
+
+
+
+```{r}
+# k=10
+# folds=cut(seq(1,nrow(Train)),breaks = k,labels = FALSE)
+# head(folds)
+# set.seed(10)
+# Train<-Train
+# Test<-Test
+# sapply(1:k,FUN = function(i){
+#   lm<-lm(close~ ., data = Train)
+#   lm.pred<-predict(lm,Test)
+#   test.rf_scored=as_tibble(cbind(Test, lm.pred))
+#   RMSE_rf_TEST <- yardstick::rmse(test.rf_scored, truth=close, estimate=lm.pred)
+# })
+
+```
+
+
+
+```{r}
+Test$id<-Test1$id
+Target <- predict(model, Test)
+test.rf_scored <- as_tibble(cbind(Test, Target))
+
+glimpse(test.rf_scored)
+```
+
+
+
+
+```{r}
+
+Submission<-dplyr::select(test.rf_scored,id,Target)
+
+
+write.csv(Submission,"Submission5.csv",row.names = FALSE)
+```

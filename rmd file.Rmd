@@ -1,0 +1,317 @@
+---
+title: "PREDICTING CRYPTOCURENCY CLOSING PRICE"
+author: "Your Name"
+date: "6/26/2021"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(dlookr)
+library(missRanger)
+library(tidyr)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(tidyselect)
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(ggcorrplot)
+```
+
+
+```{r}
+Train <- read_csv("Train.csv")
+colnames(Train)
+str(Train)
+```
+
+```{r}
+Train<-Train%>%
+  remove_constant()
+```
+
+
+```{r}
+Train%>%
+  get_dupes(id)
+```
+
+## IMPUTING MISSING VALUES
+
+```{r}
+clean_data<-missRanger(Train,
+                       formula = . ~ .,
+                       seed = 3,
+                       num.trees=20)
+```
+
+
+
+
+```{r}
+features<-colnames(select(clean_data,-id))
+for (i in features){
+  clean_data[[i]]<-imputate_outlier(clean_data,i,method = "median")
+}
+
+```
+
+
+```{r}
+boxplot(clean_data$close)
+boxplot(log_close_imp)
+boxplot(close_imputed)
+```
+
+
+
+```{r}
+na_count1 <-sapply(Train, function(y) sum(length(which(is.na(y)))))
+na_count1 <- data.frame(na_count1)
+na_count1
+```
+
+
+```{r}
+plot_na_pareto(Train[1:5])
+plot_na_pareto(Train[6:10])
+plot_na_pareto(Train[11:15])
+plot_na_pareto(Train[16:20])
+plot_na_pareto(Train[21:25])
+plot_na_pareto(Train[26:30])
+plot_na_pareto(Train[31:35])
+plot_na_pareto(Train[36:40])
+plot_na_pareto(Train[41:45])
+plot_na_pareto(Train[46:49])
+```
+
+
+
+
+
+```{r}
+attach(Train)
+```
+
+
+```{r}
+numeric_variables<-select(Train,-id)
+numeric_variables$avg_o_h_l=(open+high+low)/3
+numeric_variables$avg_market_cap<-(market_cap+market_cap_global)/2
+```
+
+
+
+```{r}
+features<-colnames(numeric_variables)
+for (i in features){
+ boxplot(log(numeric_variables[[i]]), col =blues9,xlab =paste(i),main = paste("A boxplot of ", i))
+}
+```
+
+
+```{r}
+features<-colnames(select(clean_data,-id))
+for (i in features){
+ boxplot(clean_data[[i]], col =blues9,xlab =paste(i),main = paste("A boxplot of ", i))
+}
+```
+
+
+
+
+```{r,message=FALSE,warning=FALSE}
+
+features<-colnames(numeric_variables)
+for (i in features){
+  print(ggplot(numeric_variables, aes(x=close, y=numeric_variables[[i]])) +
+  geom_point() + 
+    ylab(i)+
+  geom_smooth(method=lm))
+}
+
+```
+
+
+
+
+
+
+```{r}
+closedata<-select(Train,close,low,high,market_cap,social_score,tweet_sentiment_impact1 )
+
+imputate_na(closedata, close, high,method = "mice")
+
+```
+
+
+
+```{r}
+numeric_variables$zz=imputate_na(numeric_variables, close, market_cap,method = "rpart")
+```
+
+
+```{r}
+imputate_outlier(closedata,close,method = "mean")%>%
+  plot()
+
+imputate_outlier(closedata,close,method = "capping")%>%
+  plot()
+
+imputate_outlier(closedata,close,method = "median")%>%
+  plot()
+
+imputate_outlier(closedata,close,method = "mode")%>%
+  plot()
+
+```
+
+
+
+
+```{r}
+trainIndex <- createDataPartition(clean_data$close, 
+                                  p = .6, 
+                                  list = FALSE, 
+                                  times = 1)
+
+TRAIN <-clean_data[trainIndex, ]
+TEST <- clean_data[-trainIndex, ]
+```
+
+
+
+```{r}
+# RF_model <- randomForest(close~open+volume+volume_24h_rank+social_volume_24h_rank+market_cap_global+social_volume+url_shares+tweet_spam+tweet_followers+news+tweet_sentiment_impact5,
+#                          data = TRAIN,
+#                          ntree= 550,
+#                          mtry=3,
+#                          keep.forest=TRUE,
+#                          importance=TRUE)
+# 
+# RF_model
+
+
+RF_model <- randomForest(close~open+low+open+market_cap+market_cap_global,
+                         data = TRAIN,
+                         ntree= 550,
+                         mtry=3,
+                         keep.forest=TRUE,
+                         importance=TRUE)
+
+RF_model
+```
+
+
+```{r}
+varImp(RF_model)
+
+
+y_hat <- predict(RF_model, TEST)
+```
+
+
+```{r}
+test.rf_scored <- as_tibble(cbind(TEST, y_hat))
+
+glimpse(test.rf_scored)
+```
+
+
+```{r}
+RMSE_rf_TEST <- yardstick::rmse(test.rf_scored, truth=close, estimate=y_hat)
+
+RMSE_rf_TEST
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(readr)
+Test <- read_csv("Test.csv")
+```
+
+
+```{r}
+Test<-Test%>%
+  remove_empty()
+```
+
+
+
+```{r}
+Test<-Test%>%
+  remove_constant()
+```
+
+
+```{r}
+Test%>%
+  get_dupes(id)
+```
+
+## IMPUTING MISSING VALUES
+
+```{r}
+clean_data_test<-missRanger(Test,
+                       formula = . ~ .,
+                       seed = 3,
+                       num.trees=20)
+```
+
+
+
+```{r}
+features<-colnames(select(clean_data_test,-id))
+for (i in features){
+  clean_data_test[[i]]<-imputate_outlier(clean_data_test,i,method = "median")
+}
+
+```
+
+
+
+```{r}
+RF_model_full <- randomForest(close~volume+tweets+unique_url_shares+tweet_sentiment3+social_volume+url_shares+tweet_spam+tweet_followers+tweet_sentiment_impact5,
+                         data = clean_data,
+                         ntree= 550,
+                         mtry=3,
+                         keep.forest=TRUE,
+                         importance=TRUE)
+
+RF_model_full
+```
+
+
+
+
+```{r}
+Target <- predict(RF_model_full, clean_data_test)
+test.rf_scored <- as_tibble(cbind(clean_data_test, Target))
+
+glimpse(test.rf_scored)
+```
+
+
+
+```{r}
+Submission<-dplyr::select(test.rf_scored,id,Target)
+
+
+write.csv(Submission,"Submission_RF3.csv",row.names = FALSE)
+```
+

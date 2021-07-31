@@ -1,0 +1,256 @@
+---
+title: "MULTIPLE LINEAR REGRESSION"
+author: "Your Name"
+date: "6/27/2021"
+output: html_document
+---
+
+```{r, warning=FALSE, message=FALSE}
+library(dlookr)
+library(missRanger)
+library(tidyr)
+library(Rcpp)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(tidyselect)
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(ggcorrplot)
+```
+
+
+```{r}
+Train <- read_csv("Train.csv")
+# colnames(Train)
+# str(Train)
+```
+
+
+
+
+```{r}
+Train<-Train%>%
+  remove_constant()
+```
+
+
+```{r}
+Train%>%
+  get_dupes(id)
+```
+
+
+```{r}
+missing_values<-function(dataframe){
+  na_count1 <-sapply(dataframe, function(y) sum(length(which(is.na(y)))))
+  na_count1 <- data.frame(na_count1)
+  na_count1
+}
+missing_values(dataframe =Train )
+```
+
+
+```{r}
+Train<-select(Train, open,high, low,volume, market_cap, market_cap_global, url_shares,
+              unique_url_shares, reddit_posts, reddit_comments, tweet_spam, tweet_favorites, average_sentiment, news, social_impact_score, volatility, percent_change_24h)
+```
+
+
+```{r}
+missing_values(dataframe =Train )
+```
+
+
+
+
+
+
+```{r}
+Train$url_shares<-imputate_na(Train, market_cap, url_shares, method= "rpart") %>% 
+```
+
+
+
+```{r}
+Train$volume<-imputate_na(Train[1:5], volume, open, method= "mice") %>% 
+
+```
+
+
+```{r}
+Train$low<-imputate_na(Train[,c(1:8)], low, high, method= "rpart") %>% 
+
+```
+
+
+
+```{r}
+Train$high<-imputate_na(Train[,c(1:5)], high, open, method= "mice") %>% 
+
+```
+
+
+
+
+```{r}
+Train$open<-imputate_na(Train[ ,c(1:5)], open, high, method = "mice") %>% 
+
+```
+
+
+
+```{r}
+imputate_na(Train, open, high, method = "rpart") %>% 
+  plot()
+```
+
+
+
+
+
+
+## IMPUTING MISSING VALUES
+
+
+```{r}
+# Data_zeros<-Train
+# Data_zeros[is.na(Data_zeros)] = 0
+```
+
+#### IMPUTING MISSING VALUES USING THE MISSRANGER FUNCTION
+
+```{r}
+
+Data_zeros<-missRanger(Train,
+                       formula = . ~ .,
+                       seed = 3,
+                       num.trees=20)
+
+```
+
+
+#### IPUTING OUTLIERS VALUES WITH THE MEDIAN FUNCTION
+
+```{r}
+
+features<-colnames(select(Data_zeros))
+for (i in features){
+  Data_zeros[[i]]<-imputate_outlier(Data_zeros,i,method = "median")
+}
+
+
+```
+
+
+
+
+```{r}
+Data_zeros$avg_market<-(Data_zeros$market_cap+Data_zeros$market_cap_global)/2
+
+trainIndex <- createDataPartition(Data_zeros$close, 
+                                  p = .6, 
+                                  list = FALSE, 
+                                  times = 1)
+
+TRAIN <-Data_zeros[trainIndex, ]
+TEST <- Data_zeros[-trainIndex, ]
+```
+
+
+```{r}
+LM_model<- lm(close ~volume + tweets + unique_url_shares+reddit_posts+tweet_sentiment_impact2+tweet_sentiment_impact3+tweet_sentiment2 + url_shares + tweet_spam +tweet_followers + tweet_sentiment_impact5, data =Train)
+summary(LM_model)
+```
+
+
+
+```{r}
+
+y_hat <- predict(LM_model, TEST)
+```
+
+
+```{r}
+test.rf_scored <- as_tibble(cbind(TEST, y_hat))
+
+glimpse(test.rf_scored)
+```
+
+
+```{r}
+RMSE_rf_TEST <- yardstick::rmse(test.rf_scored, truth=close, estimate=y_hat)
+
+RMSE_rf_TEST
+```
+
+
+#### DATA PREDICTION WITH TEST DATA
+
+
+```{r}
+library(readr)
+Test <- read_csv("Test.csv")
+```
+
+```{r}
+Test<-Test%>%
+  remove_constant()
+```
+
+
+```{r}
+Test<-Test%>%
+  remove_empty()
+```
+
+
+```{r}
+# Data_zeros_test<-Test
+# Data_zeros_test[is.na(Data_zeros_test)]=0
+```
+
+
+
+
+```{r}
+
+Test<-missRanger(Test,
+                       formula = . ~ .,
+                       seed = 3,
+                       num.trees=20)
+
+```
+
+
+#### IPUTING MISSING VALUES WITH THE MEDIAN FUNCTION
+
+```{r}
+
+features<-colnames(select(Test))
+for (i in features){
+  Test[[i]]<-imputate_outlier(Test,i,method = "median")
+}
+
+
+```
+
+
+
+```{r}
+Target <- predict(LM_model, Test)
+test.rf_scored <- as_tibble(cbind(Test, Target))
+
+glimpse(test.rf_scored)
+```
+
+
+
+
+```{r}
+Submission<-dplyr::select(test.rf_scored,id,Target)
+
+
+write.csv(Submission,"Submission_LModel.csv",row.names = FALSE)
+```
